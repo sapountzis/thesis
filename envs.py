@@ -1,4 +1,5 @@
 import datetime
+import math
 import os
 from datetime import timedelta
 import cv2
@@ -19,7 +20,8 @@ modelsdir = 'models/PPO'
 
 class TrainingEnv(Env):
     def __init__(self, df: dict, capital, past_steps=None, fiat='usdt', fee=0.001, loss_tolerance=0.2,
-                 loss_penalty_coef=1, holding_penalty_coef=0.01, holding_penalty_threshold=0.4, reward_alpha=0.1):
+                 loss_penalty_coef=1, holding_penalty_coef=0.01, holding_penalty_threshold=0.4, reward_alpha=0.1,
+                 fixed_episode_length=True):
 
         super(TrainingEnv, self).__init__()
 
@@ -37,14 +39,11 @@ class TrainingEnv(Env):
         self.holding_penalty_coef = holding_penalty_coef
         self.holding_penalty_threshold = holding_penalty_threshold
         self.reward_alpha = reward_alpha
+        self.max_ep_length = math.ceil(np.log(self.loss_tolerance)/np.log(1-self.fee)) if fixed_episode_length else np.inf
+        print(f'Maximum Episode Length: {self.max_ep_length}')
 
         self.interval2offset = {interval: to_offset(interval) for interval in self.intervals}
 
-        # load and preprocess training data
-        # self.data = {f'{file.split(fiat)[0]}_{interval}': self.data_resampling(pd.read_feather(f'{data_dir}/{file}'),
-        #                                                                        interval)
-        #              for file in os.listdir(data_dir) for interval in self.intervals}
-        # extract coins from data
         self.coins = set([c.removesuffix(self.fiat.lower())
                           for interval in self.data.keys() for c in self.data[interval].keys()])
         # initialize portfolio allocations
@@ -185,8 +184,9 @@ class TrainingEnv(Env):
         self.portfolio_value = portfolio_value
 
         maximum_training_reached = self.current_time + self.time_step >= self.end_time
+        max_ep_length_reached = self.steps >= self.max_ep_length
         loss_tolerance_threshold_reached = self.portfolio_value <= self.capital * self.loss_tolerance
-        if maximum_training_reached or loss_tolerance_threshold_reached:
+        if maximum_training_reached or loss_tolerance_threshold_reached or max_ep_length_reached:
             self.done = True
 
         self.trade_rate = self.trades / self.steps
