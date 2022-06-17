@@ -1,13 +1,12 @@
 import os
 import asyncio
-from dotenv import load_dotenv
 from datetime import datetime
 import requests
 import pandas as pd
+from finrl.finrl_meta.preprocessor.preprocessors import data_split
+# load_dotenv()
 
-load_dotenv()
-
-api_key = os.getenv('COIN_API7')
+# api_key = os.getenv('COIN_API7')
 fiat = 'USDT'
 coins = ['BTC', 'ETH', 'BNB', 'ADA', 'XRP', 'DOT', 'DOGE']
 symbol_type = 'SPOT'
@@ -141,7 +140,26 @@ def align_data():
 
 
 if __name__ == '__main__':
-    align_data()
+    fiat = 'USDT'
+    data = pd.read_feather('data/OHLC_candles/Crypto/minute_binance/BTCUSDT.feather')
+    from loading_utils import load_feather_dir
+
+    pairs = [p.split('.')[0] for p in os.listdir('data/OHLC_candles/Crypto/minute_binance') if fiat in p]
+
+    data = load_feather_dir(path='data/OHLC_candles/Crypto/minute_binance', pairs=pairs, n_workers=4, resample='5min')
+
+    from preprocessing_utils import construct_features
+    train_end = '2021'
+    train_start = None
+    feature_config = (
+        dict(name='candle_values', func_name='candle_values'),
+    )
+    data_pre = construct_features(candles_dict=data, feature_config=feature_config, train_end=train_end, normalize=True)
+
+    data_train = {k: data_split(v.reset_index(), start='2021', end=None) for k, v in data_pre.items()}
+
+    print(data_train)
+
 
 
 
