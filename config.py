@@ -1,14 +1,15 @@
 import json
 from torch.nn import ReLU, Tanh
 import torch
-from feature_extractors import AdaptiveNormalizationExtractor
+from feature_extractors import AdaptiveNormalizationExtractor, DainLstmExtractor
 import time
 import os
 
 
 def make_config(config_path):
     activation_f_map = {'relu': ReLU, 'tanh': Tanh}
-    features_extractor_class_map = {'adaptive_normalization': AdaptiveNormalizationExtractor}
+    features_extractor_class_map = {'adaptive_normalization': AdaptiveNormalizationExtractor,
+                                    'dain_lstm': DainLstmExtractor}
 
     with open(config_path, "r") as configfile:
         config = json.load(configfile)

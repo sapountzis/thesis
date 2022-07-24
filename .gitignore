@@ -5,3 +5,4 @@ tb_logs/
 models/
 data_old/
 data_aligned/
+logs/
