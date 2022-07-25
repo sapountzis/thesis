@@ -3,7 +3,7 @@ import os
 import time
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
-from envs import TrainingEnv
+from envs import TrainingEnvV2
 from feature_extractors import CustomCombinedExtractor
 from callbacks import TensorboardCallback
 from config import make_config
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     df = load_train_df(config['data_dir'], intervals=config['intervals'], coins=config['coins'],
                        fiat=config['fiat'], index_col='date', end_date=config['train_end'])
 
-    env = TrainingEnv(df=df, **config['env_kwargs'])
+    env = TrainingEnvV2(df=df, **config['env_kwargs'])
     env = Monitor(env, filename=f'{logdir}/{agent_id}', info_keywords=tuple(config['monitor']))
 
     tensorboard_callback = TensorboardCallback(verbose=0, monitor_kws=config['tb_monitor'])
