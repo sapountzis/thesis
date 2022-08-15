@@ -16,6 +16,14 @@ class TensorboardCallback(BaseCallback):
                 holdings = self.training_env.get_attr(monitor_kw)[0]
                 for k, v in holdings.items():
                     self.logger.record(f'holdings_pc/{k}', v)
+            elif monitor_kw == 'ath_ratio':
+                ath_ratio = self.training_env.get_attr(monitor_kw)[0]
+                for k, v in ath_ratio.items():
+                    self.logger.record(f'ath_ratio/{k}', v)
+            elif monitor_kw == 'atl_ratio':
+                ath_ratio = self.training_env.get_attr(monitor_kw)[0]
+                for k, v in ath_ratio.items():
+                    self.logger.record(f'atl_ratio/{k}', v)
             else:
                 self.logger.record(monitor_kw, self.training_env.get_attr(monitor_kw)[0])
 

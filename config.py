@@ -1,7 +1,7 @@
 import json
 from torch.nn import ReLU, Tanh
 import torch
-from feature_extractors import AdaptiveNormalizationExtractor, DainLstmExtractor
+from feature_extractors import AdaptiveNormalizationExtractor, DainLstmExtractor, CNNFeaturesExtractor
 import time
 import os
 
@@ -9,7 +9,8 @@ import os
 def make_config(config_path):
     activation_f_map = {'relu': ReLU, 'tanh': Tanh}
     features_extractor_class_map = {'adaptive_normalization': AdaptiveNormalizationExtractor,
-                                    'dain_lstm': DainLstmExtractor}
+                                    'dain_lstm': DainLstmExtractor,
+                                    'cnn': CNNFeaturesExtractor}
 
     with open(config_path, "r") as configfile:
         config = json.load(configfile)
