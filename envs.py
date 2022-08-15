@@ -405,7 +405,7 @@ class TrainingEnvV2(Env):
         self.portfolio.update({self.fiat: self.capital})
         # initialize portfolio allocations
         self.portfolio_alloc = {coin: 0 for coin in self.coins}
-        self.portfolio_alloc.update({self.fiat: self.capital})
+        self.portfolio_alloc.update({self.fiat: 1})
 
         # initialize start and end training time
         self.start_time = max(d['date'].min().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -432,7 +432,7 @@ class TrainingEnvV2(Env):
         # initialize maximum interval to calculate minimum time offest required
         self.max_interval = max([offset for offset in self.interval2offset.values()])
         # initialize current time := start time + required offset
-        self.current_time = self.start_time + self.max_interval * self.past_steps
+        self.current_time = self.start_time + self.max_interval * (self.past_steps + 1)
         self.current_time = self.rand_date(start=int(self.current_time.to_datetime64()),
                                            end=int((self.end_time - timedelta(days=1)).to_datetime64()), n=1)
         self.data_cols = ['open', 'low', 'high', 'close', 'volume']
@@ -454,6 +454,7 @@ class TrainingEnvV2(Env):
         # load initial observation data
         self.observation_data = {}
         self.produce_step_data(self.current_time)
+        print(self.data['data'].keys())
         # initialize action space
         self.action_space = Box(low=0, high=1, shape=(len(self.portfolio)+1,))
         # create action to coin converter
@@ -477,6 +478,9 @@ class TrainingEnvV2(Env):
         self.current_time = self.start_time + self.max_interval * self.past_steps
         self.current_time = self.rand_date(start=int(self.current_time.to_datetime64()),
                                            end=int((self.end_time - timedelta(days=1)).to_datetime64()), n=1)
+        while self.current_time <= (self.start_time + self.max_interval * self.past_steps):
+            self.current_time = self.rand_date(start=int(self.current_time.to_datetime64()),
+                                               end=int((self.end_time - timedelta(days=1)).to_datetime64()), n=1)
         # debug / info
         self.steps = 0
         self.trades = 0
@@ -494,7 +498,7 @@ class TrainingEnvV2(Env):
         self.portfolio.update({self.fiat: self.capital})
         # initialize portfolio allocations
         self.portfolio_alloc = {coin: 0 for coin in self.coins}
-        self.portfolio_alloc.update({self.fiat: self.capital})
+        self.portfolio_alloc.update({self.fiat: 1})
         self.portfolio_value = self.capital
         self.current_coin = self.fiat
         self.produce_step_data(self.current_time)
@@ -512,10 +516,13 @@ class TrainingEnvV2(Env):
     def step(self, action: np.ndarray):
         reward = 0
         self.steps += 1
+        if self.steps == 1:
+            reward -= 0.0001
         portfolio_alloc = self.softmax(action[:-1])
-        portfolio_alloc = {self.action2coin[idx]: portfolio_alloc[idx] for idx in self.action2coin.keys()}
+        portfolio_alloc = {coin: portfolio_alloc[idx] for idx, coin in self.action2coin.items()}
 
-        trade = action[-1] > 0.5
+        # trade = action[-1] > 0.5
+        trade_threshold = action[-1]
 
         prices_curr = self.get_prices(self.current_time)
 
@@ -528,6 +535,9 @@ class TrainingEnvV2(Env):
             self.ath_ratio[coin] = price / self.ath[coin]
             self.atl_ratio[coin] = self.atl[coin] / price
 
+        # mean absolute portfolio allocation difference
+        mapad = np.mean(np.abs([val - portfolio_alloc[coin] for coin, val in self.portfolio_alloc.items()]))
+        trade = mapad > trade_threshold
         if trade:
             self.portfolio_alloc = portfolio_alloc
             for coin, val in self.portfolio.items():
@@ -541,8 +551,10 @@ class TrainingEnvV2(Env):
 
             self.portfolio[self.fiat] *= portfolio_alloc[self.fiat]
             self.portfolio_alloc = portfolio_alloc
-            self.holdings_pc = portfolio_alloc
             self.trades += 1
+
+        self.holdings_pc = {coin: self.holdings_pc[coin] + (val - self.holdings_pc[coin]) / self.steps
+                            for coin, val in self.portfolio_alloc.items()}
 
         # increment time
         self.current_time += pd.Timedelta(self.time_step)
@@ -552,7 +564,7 @@ class TrainingEnvV2(Env):
         portfolio_value = sum(self.portfolio[coin] * prices_next[coin] for coin in self.coins)
         portfolio_value += self.portfolio[self.fiat]
 
-        value_pc_diff_step = (portfolio_value - self.portfolio_value) / self.portfolio_value
+        value_pc_diff_step = (portfolio_value - self.portfolio_value) / self.capital
         prev_portfolio_value = self.portfolio_value
         self.portfolio_value = portfolio_value
 
@@ -566,7 +578,7 @@ class TrainingEnvV2(Env):
         self.trade_capital_change = value_pc_diff_step
         self.total_capital_change = (self.portfolio_value - self.capital) / self.capital
         self.fiat_holding_pc = self.fiat_holding / self.steps
-        reward += value_pc_diff_step
+        reward += value_pc_diff_step + 0.0001
 
         # holding_threshold_reached = self.holdings_pc[action_coin] > self.holding_penalty_threshold
         # reward += self.reward_alpha * self.total_capital_change + value_pc_diff_step
@@ -661,10 +673,18 @@ class TrainingEnvV2(Env):
         dict_space_res = {f'{key}': self.preprocess_step(d, datetime_val, key)
                           for key, d in self.data['data'].items()}
 
+        if any(v.shape[0] == 0 for v in dict_space_res.values()):
+            print(self.current_time)
+            print(self.curr_idx)
+            print(self.start_time)
+            print(self.end_time)
+            for k, v in dict_space_res.items():
+                print({k: v.shape})
+                print({k: v})
+
         dict_space_res.update({'portfolio_alloc': np.array([v for v in self.portfolio_alloc.values()]),
                                'ath_ratio': np.array([v for v in self.ath_ratio.values()]),
                                'atl_ratio': np.array([v for v in self.atl_ratio.values()])})
-
 
         self.observation_data = dict_space_res
 
@@ -673,7 +693,16 @@ class TrainingEnvV2(Env):
         if pctg:
             coin_data['volatility'] = coin_data['volatility'] / coin_data['low']
 
-        coin_data = coin_data.drop(columns=['high', 'low', 'open', 'close', 'volume'])
+        coin_data = coin_data[['date', 'volatility']]
+
+        return coin_data
+
+    def _openclose(self, coin_data, pctg=True):
+        coin_data['openclose'] = coin_data['close'] - coin_data['open']
+        if pctg:
+            coin_data['openclose'] = coin_data['openclose'] / coin_data['open']
+
+        coin_data = coin_data[['date', 'openclose']]
 
         return coin_data
 
@@ -703,13 +732,20 @@ class TrainingEnvV2(Env):
                                                  for coin, d in coins.items()]).drop(columns=['date']).values[1:]
             for interval, coins in data.items()}
 
+        open_close = {
+            f'openclose_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
+                                             [self._openclose(d)[d['date'] >= self.start_time].rename(
+                                                 columns={'openclose': f'{coin}_openclose'})
+                                                 for coin, d in coins.items()]).drop(columns=['date']).values[1:]
+            for interval, coins in data.items()}
+
         volumes = {f'volumes_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
                                                  [d[['date', 'volume']][d['date'] >= self.start_time].rename(
                                                      columns={'volume': f'{coin}_volume'})
-                                                     for coin, d in coins.items()]).drop(columns=['date']).values[1:]
+                                                     for coin, d in coins.items()]).drop(columns=['date']).pct_change().values[1:]
                    for interval, coins in data.items()}
 
-        return {'dates': dates, 'data': {**price_pct_chg, **volatility, **volumes}, 'prices': {**prices}}
+        return {'dates': dates, 'data': {**price_pct_chg, **open_close, **volatility, **volumes}, 'prices': {**prices}}
 
     def get_prices(self, current_time):
         idx = self.curr_idx[f'{self.min_interval}']['idx']
