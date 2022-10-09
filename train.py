@@ -26,7 +26,7 @@ if __name__ == '__main__':
     df = load_train_df(config['data_dir'], intervals=config['intervals'], coins=config['coins'],
                        fiat=config['fiat'], index_col='date', end_date=config['train_end'], start_date='2020-01-01')
 
-    btc_hold = df['10min']['btcusdt'].iloc[:episode_timesteps]['open']
+    btc_hold = df['1H']['btcusdt'].iloc[:episode_timesteps]['open']
     btc_hold = btc_hold.iloc[-1] / btc_hold.iloc[0]
     print(f'BTC hold return: {btc_hold}')
     # plt.show()
