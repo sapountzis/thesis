@@ -12,7 +12,7 @@ def calculate_output_length(length_in, kernel_size, stride=1, padding=0, dilatio
 
 
 class extract_tensor(nn.Module):
-    def forward(self,x):
+    def forward(self, x):
         # Output shape (batch, features, hidden)
         tensor, _ = x
         # Reshape shape (batch, hidden)
@@ -65,7 +65,6 @@ class DainLstmExtractor(BaseFeaturesExtractor):
         return th.cat(encoded_tensor_list, dim=1)
 
 
-
 class AdaptiveNormalizationExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: gym.spaces.Dict):
         super(AdaptiveNormalizationExtractor, self).__init__(observation_space, features_dim=1)
@@ -103,11 +102,13 @@ class AdaptiveNormalizationExtractor(BaseFeaturesExtractor):
 
 
 class CNNFeaturesExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict, channels=4, kernel_size=5, activation_f=nn.ReLU):
+    def __init__(self, observation_space: gym.spaces.Dict, channels=2, kernel_size=5, activation_fn=nn.ReLU,
+                 dense_layers=None, dense_units=256):
 
         super(CNNFeaturesExtractor, self).__init__(observation_space, features_dim=1)
 
         non_ts_features = ['portfolio_alloc', 'ath_ratio', 'atl_ratio']
+        ts_features = {'pricesPctChg', 'volatility', 'openclose', 'volumes'}
 
         price_obs_shape = (0, 0)
         for key, space in observation_space.spaces.items():
@@ -115,32 +116,29 @@ class CNNFeaturesExtractor(BaseFeaturesExtractor):
                 price_obs_shape = space.shape
                 break
 
-        # cnn extractor
-        out_len = price_obs_shape[0]
-        ts_extractor = []
-        in_channels = 1
-        while out_len > kernel_size :
-            ts_extractor.append(nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=(kernel_size, 1)))
-            ts_extractor.append(activation_f())
-            in_channels = channels
-            out_len = calculate_output_length(out_len, kernel_size)
-            if out_len == price_obs_shape[1] // 2:
-                ts_extractor.append(nn.MaxPool2d(kernel_size=(2, 1), stride=(2, 1)))
-                out_len = calculate_output_length(out_len, kernel_size=2, stride=2)
-        ts_extractor.append(nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=(out_len, 1)))
-        ts_extractor.append(activation_f())
-        ts_extractor.append(nn.Flatten())
-        out_len = price_obs_shape[1] * channels
-
-        # for out_dim in ts_extractor_arch_mlp:
-        #     ts_extractor.append(nn.Linear(in_dim, out_dim))
-        #     ts_extractor.append(activation_f())
-        #     in_dim = out_dim
-        # out_len = in_dim
-        # ts_extractor = [nn.LSTM(input_size=price_obs_shape[1], hidden_size=ts_extractor_arch[-1], batch_first=True)]
-        # out_len = ts_extractor_arch[-1]
-
-        self.ts_extractor = nn.Sequential(*ts_extractor)
+        # cnn extractors
+        out_len = 0
+        self.ts_extractors = {}
+        for ts_feature in ts_features:
+            self.ts_extractors[ts_feature], out_len = self.make_cnn_extractor(kernel_size, channels, activation_fn,
+                                                                              price_obs_shape[1], price_obs_shape[2])
+        # out_len = price_obs_shape[1]
+        # ts_extractor = []
+        # in_channels = 1
+        # while out_len > kernel_size:
+        #     ts_extractor.append(nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=(kernel_size, 1)))
+        #     ts_extractor.append(activation_fn())
+        #     in_channels = channels
+        #     out_len = calculate_output_length(out_len, kernel_size)
+        #     if price_obs_shape[1] % out_len == 0:
+        #         ts_extractor.append(nn.MaxPool2d(kernel_size=(2, 1), stride=(2, 1)))
+        #         out_len = calculate_output_length(out_len, kernel_size=2, stride=2)
+        # ts_extractor.append(nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=(out_len, 1)))
+        # ts_extractor.append(activation_fn())
+        # ts_extractor.append(nn.Flatten())
+        # out_len = price_obs_shape[2] * channels
+        #
+        # self.ts_extractor = nn.Sequential(*ts_extractor)
 
         extractors = {}
 
@@ -149,31 +147,59 @@ class CNNFeaturesExtractor(BaseFeaturesExtractor):
         # so go over all the spaces and compute output feature sizes
         for key, subspace in observation_space.spaces.items():
             if key not in non_ts_features:
-                extractors[key] = self.ts_extractor
-                total_concat_size += out_len
+                for extractor_key in self.ts_extractors.keys():
+                    if extractor_key in key:
+                        extractors[key] = self.ts_extractors[extractor_key]
+                        total_concat_size += out_len
             else:
                 self.n_coins = subspace.shape[0]
                 extractors[key] = nn.Flatten()
                 total_concat_size += self.n_coins
 
+        self.dense_layers = dense_layers
+        self.dense_units = dense_units
+        if self.dense_layers is not None:
+            concat_extractor = []
+            for i in range(dense_layers):
+                concat_extractor.append(nn.Linear(total_concat_size, dense_units)
+                                        if i == 0 else nn.Linear(dense_units, dense_units))
+                concat_extractor.append(activation_fn())
+            concat_extractor = nn.Sequential(*concat_extractor)
+            extractors.update({'concat_extractor': concat_extractor})
+
         self.extractors = nn.ModuleDict(extractors)
 
         # Update the features dim manually
-        self._features_dim = total_concat_size
+        self._features_dim = total_concat_size if self.dense_layers is None else self.dense_units
 
-    def forward(self, observations) -> th.Tensor:
+    def make_cnn_extractor(self, kernel_size, channels, activation_fn, timesteps, coins):
+        out_len = timesteps
+        ts_extractor = []
+        in_channels = 1
+        while out_len > kernel_size:
+            ts_extractor.append(nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=(kernel_size, 1)))
+            ts_extractor.append(activation_fn())
+            in_channels = channels
+            out_len = calculate_output_length(out_len, kernel_size)
+            if timesteps % out_len == 0:
+                ts_extractor.append(nn.MaxPool2d(kernel_size=(2, 1), stride=(2, 1)))
+                out_len = calculate_output_length(out_len, kernel_size=2, stride=2)
+        ts_extractor.append(nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=(out_len, 1)))
+        ts_extractor.append(activation_fn())
+        ts_extractor.append(nn.Flatten())
+        out_len = coins * channels
 
-        # self.extractors contain nn.Modules that do all the processing.
-        # for key, extractor in self.extractors.items():
-        #     print(observations[key].shape)
-        #     tmp = extractor(observations[key])
-        #     print(tmp[0].shape)
-        encoded_tensor_list = [extractor(observations[key]) for key, extractor in self.extractors.items()]
+        return nn.Sequential(*ts_extractor), out_len
 
+    def forward(self, observations: dict) -> th.Tensor:
+        encoded_tensor_list = th.cat([self.extractors[key](obs) for key, obs in observations.items()], dim=1)
         # Concatenate all the tensors
         # encoded_tensor = th.cat(encoded_tensor_list, dim=1)
         # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
-        return th.cat(encoded_tensor_list, dim=1)
+        if self.dense_layers is not None:
+            return self.extractors['concat_extractor'](encoded_tensor_list)
+
+        return encoded_tensor_list
 
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
