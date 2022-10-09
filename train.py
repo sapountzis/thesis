@@ -11,7 +11,7 @@ from tmp import TradingEnv
 
 if __name__ == '__main__':
 
-    episode_timesteps = 4096
+    episode_timesteps = 1024
 
     config = make_config('config.json')
 
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     # )
 
     PPO_PARAMS = {
-        "n_steps": 2048,
+        "n_steps": 512,
         "ent_coef": 0.005,
         "learning_rate": 0.0001,
         "batch_size": 128,
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     curr_model_id = config['checkpoint_timesteps']
     # model = PPO('MultiInputPolicy', env, verbose=0, tensorboard_log=tensorboard_log)
     model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=0, device='cpu', **PPO_PARAMS,
-                         tensorboard_log=tensorboard_log, policy_kwargs=dict(net_arch=[256, 256, 256]))
+                         tensorboard_log=tensorboard_log, policy_kwargs=dict(net_arch=[256, 256]))
     # agent = DRLAgent(env=lambda cfg: env, price_array=None, tech_array=None, turbulence_array=None)
 
     # model_ppo = agent.get_model("ppo", model_kwargs=PPO_PARAMS)
