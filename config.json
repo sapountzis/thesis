@@ -1,3 +1,47 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:410e7c1c68cf62b9554e6893219d2b8622a46fcf0608068b1b0fc03d60695923
-size 1219
+{
+  "checkpoint_timesteps": 1000000,
+  "total_timesteps": 100000000,
+  "coins": ["BTC", "ETH", "ADA", "LTC", "VET", "XRP"],
+  "agent": "PPO",
+  "policy_kwargs": {
+    "net_arch": [{"pi": [64, 64], "vf": [64, 64]}],
+    "activation_fn": "relu",
+    "features_extractor_class": "cnn",
+    "features_extractor_kwargs": {
+      "dense_layers": 4,
+      "dense_units": 128,
+      "activation_fn": "relu"
+    }
+  },
+  "agent_kwargs": {
+    "n_steps": 2048,
+    "ent_coef": 0.001,
+    "learning_rate": 0.0001,
+    "batch_size": 64,
+    "device": "cpu"
+  },
+  "env_kwargs": {
+    "fiat": "usdt",
+    "past_steps": 32,
+    "fee": 0.00075,
+    "capital": 1000,
+    "loss_tolerance": 0.2,
+    "loss_penalty_coef": 1,
+    "holding_penalty_coef": 0.1,
+    "holding_penalty_threshold": 0.8,
+    "reward_alpha": 0.001,
+    "fixed_episode_length": true,
+    "fixed_episode_length_coef": 2,
+    "episode_length": 8192
+  },
+  "train_end": "1-1-2021",
+  "fiat": "usdt",
+  "intervals": ["10min", "4H"],
+  "data_dir": "data/OHLC_candles/Crypto/minute_binance",
+  "log_dir": "logs",
+  "tensorboard_log": "tb_logs",
+  "policy": "MultiInputPolicy",
+  "tb_monitor": ["trade_rate", "holdings_pc", "trade_capital_change", "total_capital_change", "ath_ratio", "atl_ratio", "trade_threshold"],
+  "monitor" : ["trade_rate", "total_capital_change", "ep_len_pc", "maximum_steps_reached"]
+}
+
