@@ -32,11 +32,11 @@
     "reward_alpha": 0.001,
     "fixed_episode_length": true,
     "fixed_episode_length_coef": 2,
-    "episode_length": 8192
+    "episode_length": 1024
   },
   "train_end": "1-1-2021",
   "fiat": "usdt",
-  "intervals": ["10min", "4H"],
+  "intervals": ["1H", "4H"],
   "data_dir": "data/OHLC_candles/Crypto/minute_binance",
   "log_dir": "logs",
   "tensorboard_log": "tb_logs",
