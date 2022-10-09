@@ -1,18 +1,17 @@
-import json
 import os
 import time
+# import matplotlib as mpl
+# import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
-from stable_baselines3.common.monitor import Monitor
-from envs import TrainingEnvV2
-from feature_extractors import CustomCombinedExtractor
-from callbacks import TensorboardCallback
+from sb3_contrib import RecurrentPPO
+
 from config import make_config
 from loading_utils import load_train_df
-import matplotlib.pyplot as plt
-import numpy as np
-
+from tmp import TradingEnv
 
 if __name__ == '__main__':
+
+    episode_timesteps = 4096
 
     config = make_config('config.json')
 
@@ -25,12 +24,18 @@ if __name__ == '__main__':
     tb_log_name = f'{agent_id}'
 
     df = load_train_df(config['data_dir'], intervals=config['intervals'], coins=config['coins'],
-                       fiat=config['fiat'], index_col='date', end_date=config['train_end'])
+                       fiat=config['fiat'], index_col='date', end_date=config['train_end'], start_date='2020-01-01')
 
-    env = TrainingEnvV2(df=df, **config['env_kwargs'])
-    env = Monitor(env, filename=f'{logdir}/{agent_id}', info_keywords=tuple(config['monitor']))
+    btc_hold = df['10min']['btcusdt'].iloc[:episode_timesteps]['open']
+    btc_hold = btc_hold.iloc[-1] / btc_hold.iloc[0]
+    print(f'BTC hold return: {btc_hold}')
+    # plt.show()
+    env = TradingEnv(df, capital=1000, ep_len=episode_timesteps, fee=0.00022, env_id=agent_id)
+    print('created env')
+    # env = TrainingEnvV2(df=df, **config['env_kwargs'])
+    # env = Monitor(env, filename=f'{logdir}/{agent_id}', info_keywords=tuple(config['monitor']))
 
-    tensorboard_callback = TensorboardCallback(verbose=0, monitor_kws=config['tb_monitor'])
+    # tensorboard_callback = TensorboardCallback(verbose=0, monitor_kws=config['tb_monitor'])
 
     # models = os.listdir(modelsdir)
     # if len(models) > 0:
@@ -46,25 +51,28 @@ if __name__ == '__main__':
     #     net_arch=net_arch, activation_fn=activation_f
     # )
 
-    curr_model_id = config['checkpoint_timesteps']
-    model = PPO(config['policy'], env, verbose=0, tensorboard_log=tensorboard_log,
-                policy_kwargs=config['policy_kwargs'], **config['agent_kwargs'])
+    PPO_PARAMS = {
+        "n_steps": 2048,
+        "ent_coef": 0.005,
+        "learning_rate": 0.0001,
+        "batch_size": 128,
+    }
 
+    curr_model_id = config['checkpoint_timesteps']
+    # model = PPO('MultiInputPolicy', env, verbose=0, tensorboard_log=tensorboard_log)
+    model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=0, device='cpu', **PPO_PARAMS,
+                         tensorboard_log=tensorboard_log, policy_kwargs=dict(net_arch=[256, 256, 256]))
     # agent = DRLAgent(env=lambda cfg: env, price_array=None, tech_array=None, turbulence_array=None)
-    # PPO_PARAMS = {
-    #     "n_steps": 2048,
-    #     "ent_coef": 0.005,
-    #     "learning_rate": 0.0001,
-    #     "batch_size": 128,
-    # }
+
     # model_ppo = agent.get_model("ppo", model_kwargs=PPO_PARAMS)
 
     n_loops = config['total_timesteps'] // config['checkpoint_timesteps']
     for ep in range(1, n_loops + 1):
         print(f'Episode {ep}/{n_loops}')
         curr_model_id += config['checkpoint_timesteps']
-        model.learn(total_timesteps=config['checkpoint_timesteps'], tb_log_name=tb_log_name, reset_num_timesteps=False,
-                    callback=tensorboard_callback)
+        model.learn(total_timesteps=config['checkpoint_timesteps'], reset_num_timesteps=False, tb_log_name=tb_log_name)
+        # model.learn(total_timesteps=config['checkpoint_timesteps'], tb_log_name=tb_log_name, reset_num_timesteps=False,
+        #             callback=tensorboard_callback)
         model.save(f'{modelsdir}/{curr_model_id}')
         # print('here')
         # model_ppo = agent.train_model(model=model_ppo,

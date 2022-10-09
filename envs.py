@@ -2,7 +2,7 @@ import datetime
 import math
 import os
 from datetime import timedelta
-import cv2
+# import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -12,6 +12,7 @@ from gym.spaces import Box, Dict, Discrete, MultiBinary
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from pandas.tseries.frequencies import to_offset
 from functools import reduce
+import random
 
 np.seterr(all='raise')
 
@@ -406,6 +407,7 @@ class TrainingEnvV2(Env):
         # initialize portfolio allocations
         self.portfolio_alloc = {coin: 0 for coin in self.coins}
         self.portfolio_alloc.update({self.fiat: 1})
+        self.trade_threshold = 0
 
         # initialize start and end training time
         self.start_time = max(d['date'].min().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -433,8 +435,8 @@ class TrainingEnvV2(Env):
         self.max_interval = max([offset for offset in self.interval2offset.values()])
         # initialize current time := start time + required offset
         self.current_time = self.start_time + self.max_interval * (self.past_steps + 1)
-        self.current_time = self.rand_date(start=int(self.current_time.to_datetime64()),
-                                           end=int((self.end_time - timedelta(days=1)).to_datetime64()), n=1)
+        self.current_time = self.rand_date(start=self.current_time,
+                                           end=(self.end_time - self.max_ep_length * self.interval2offset[self.min_interval]))
         self.data_cols = ['open', 'low', 'high', 'close', 'volume']
         self.processed_cols = ['open', 'volatility', 'volume']
 
@@ -444,7 +446,7 @@ class TrainingEnvV2(Env):
 
         # initialize observation space
         dict_space = {
-            f'{k}': Box(low=-np.inf, high=np.inf, shape=(self.past_steps, self.data['data'][k].shape[-1]),
+            f'{k}': Box(low=-np.inf, high=np.inf, shape=(1, self.past_steps, self.data['data'][k].shape[-1]),
                         dtype=np.float64)
             for k in self.data['data'].keys()}
         dict_space.update({'portfolio_alloc': Box(low=0, high=1, shape=(len(self.portfolio),)),
@@ -454,7 +456,6 @@ class TrainingEnvV2(Env):
         # load initial observation data
         self.observation_data = {}
         self.produce_step_data(self.current_time)
-        print(self.data['data'].keys())
         # initialize action space
         self.action_space = Box(low=0, high=1, shape=(len(self.portfolio)+1,))
         # create action to coin converter
@@ -476,12 +477,8 @@ class TrainingEnvV2(Env):
     def reset(self, **kwargs):
         self.done = False
         self.current_time = self.start_time + self.max_interval * self.past_steps
-        self.current_time = self.rand_date(start=int(self.current_time.to_datetime64()),
-                                           end=int((self.end_time - timedelta(days=1)).to_datetime64()), n=1)
-        while self.current_time <= (self.start_time + self.max_interval * self.past_steps):
-            self.current_time = self.rand_date(start=int(self.current_time.to_datetime64()),
-                                               end=int((self.end_time - timedelta(days=1)).to_datetime64()), n=1)
-        # debug / info
+        self.current_time = self.rand_date(start=self.current_time,
+                                           end=(self.end_time - self.max_ep_length * self.interval2offset[self.min_interval]))
         self.steps = 0
         self.trades = 0
         self.trade_rate = 0
@@ -507,6 +504,7 @@ class TrainingEnvV2(Env):
         self.ath_ratio = {coin: 1 for coin in self.coins}
         self.atl = {coin: np.inf for coin in self.coins}
         self.atl_ratio = {coin: 1 for coin in self.coins}
+        self.trade_threshold = 0
 
         # Optimization | initialize indices in data
         self.curr_idx = {f'{interval}': {'datetime': self.current_time, 'idx': -1}
@@ -517,12 +515,12 @@ class TrainingEnvV2(Env):
         reward = 0
         self.steps += 1
         if self.steps == 1:
-            reward -= 0.0001
+            reward -= self.fee
         portfolio_alloc = self.softmax(action[:-1])
         portfolio_alloc = {coin: portfolio_alloc[idx] for idx, coin in self.action2coin.items()}
 
         # trade = action[-1] > 0.5
-        trade_threshold = action[-1]
+        self.trade_threshold = action[-1]
 
         prices_curr = self.get_prices(self.current_time)
 
@@ -537,7 +535,7 @@ class TrainingEnvV2(Env):
 
         # mean absolute portfolio allocation difference
         mapad = np.mean(np.abs([val - portfolio_alloc[coin] for coin, val in self.portfolio_alloc.items()]))
-        trade = mapad > trade_threshold
+        trade = mapad > self.trade_threshold
         if trade:
             self.portfolio_alloc = portfolio_alloc
             for coin, val in self.portfolio.items():
@@ -559,13 +557,15 @@ class TrainingEnvV2(Env):
         # increment time
         self.current_time += pd.Timedelta(self.time_step)
 
+        # produce next observation data
+        self.produce_step_data(self.current_time)
+
         # get next prices
         prices_next = self.get_prices(self.current_time)
         portfolio_value = sum(self.portfolio[coin] * prices_next[coin] for coin in self.coins)
         portfolio_value += self.portfolio[self.fiat]
 
         value_pc_diff_step = (portfolio_value - self.portfolio_value) / self.capital
-        prev_portfolio_value = self.portfolio_value
         self.portfolio_value = portfolio_value
 
         maximum_training_reached = self.current_time + self.time_step >= self.end_time
@@ -575,18 +575,10 @@ class TrainingEnvV2(Env):
             self.done = True
 
         self.trade_rate = self.trades / self.steps
-        self.trade_capital_change = value_pc_diff_step
+        self.trade_capital_change = value_pc_diff_step if trade else 0
         self.total_capital_change = (self.portfolio_value - self.capital) / self.capital
         self.fiat_holding_pc = self.fiat_holding / self.steps
-        reward += value_pc_diff_step + 0.0001
-
-        # holding_threshold_reached = self.holdings_pc[action_coin] > self.holding_penalty_threshold
-        # reward += self.reward_alpha * self.total_capital_change + value_pc_diff_step
-        # if holding_threshold_reached and (reward > 0):
-        #     reward *= self.holding_penalty_coef
-
-        # produce next observation data
-        self.produce_step_data(self.current_time)
+        reward += value_pc_diff_step
 
         info = {'trade_rate': self.trade_rate, 'fiat_holding_pc': self.fiat_holding_pc,
                 'total_capital_change': self.total_capital_change}
@@ -594,7 +586,7 @@ class TrainingEnvV2(Env):
         if self.done:
             info = {'trade_rate': self.trade_rate, 'total_capital_change': self.total_capital_change,
                     'ep_len_pc': self.steps / self.max_steps, 'fiat_holding_pc': self.fiat_holding / self.steps,
-                    'maximum_steps_reached': maximum_training_reached}
+                    'maximum_steps_reached': max_ep_length_reached}
 
         return self.observation_data, reward, self.done, info
 
@@ -654,26 +646,26 @@ class TrainingEnvV2(Env):
                 idx += 1
                 self.curr_idx[interval]['idx'] = idx
                 # return np.expand_dims(data[idx - self.past_steps: idx], axis=0)
-                return data[idx - self.past_steps: idx]
+                return data[:, idx - self.past_steps: idx]
 
             else:
                 if key in self.observation_data.keys():
                     return self.observation_data[key]
                 else:
                     # return np.expand_dims(data[idx - self.past_steps: idx], axis=0)
-                    return data[idx - self.past_steps: idx]
+                    return data[:, idx - self.past_steps: idx]
         else:
             idx = np.argmax(self.data['dates'][f'dates_{interval}'] > datetime_val) - 1
             self.curr_idx[interval]['datetime'] = datetime_val
             self.curr_idx[interval]['idx'] = idx
             # return np.expand_dims(data[idx - self.past_steps: idx], axis=0)
-            return data[idx - self.past_steps: idx]
+            return data[:, idx - self.past_steps: idx]
 
     def produce_step_data(self, datetime_val):
         dict_space_res = {f'{key}': self.preprocess_step(d, datetime_val, key)
                           for key, d in self.data['data'].items()}
 
-        if any(v.shape[0] == 0 for v in dict_space_res.values()):
+        if any(v.shape[1] == 0 for v in dict_space_res.values()):
             print(self.current_time)
             print(self.curr_idx)
             print(self.start_time)
@@ -693,56 +685,58 @@ class TrainingEnvV2(Env):
         if pctg:
             coin_data['volatility'] = coin_data['volatility'] / coin_data['low']
 
-        coin_data = coin_data[['date', 'volatility']]
-
-        return coin_data
+        return coin_data[['date', 'volatility']]
 
     def _openclose(self, coin_data, pctg=True):
         coin_data['openclose'] = coin_data['close'] - coin_data['open']
         if pctg:
             coin_data['openclose'] = coin_data['openclose'] / coin_data['open']
 
-        coin_data = coin_data[['date', 'openclose']]
+        return coin_data[['date', 'openclose']]
 
-        return coin_data
+    def _volume(self, coin_data, normalization=True):
+        if normalization:
+            coin_data['volume'] = (coin_data['volume'] - coin_data['volume'].min()) / (coin_data['volume'].max() - coin_data['volume'].min())
+
+        return coin_data[['date', 'volume']]
 
     def data_preprocess(self, data):
 
-        dates = {f'dates_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
+        dates = {f'dates_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='outer'),
                                              [d[d['date'] >= self.start_time]['date']
-                                              for coin, d in coins.items()]).iloc[1:, :]
+                                              for coin, d in coins.items()]).fillna(method='ffill', axis=0).iloc[1:, :]
                  for interval, coins in data.items()}
 
-        prices = {f'prices_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
+        prices = {f'prices_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='outer'),
                                                [d[['date', 'open']][d['date'] >= self.start_time].rename(
                                                    columns={'open': f'{coin}_open'})
-                                                   for coin, d in coins.items()]).drop(columns=['date']).values[1:]
+                                                   for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill', axis=0).values[1:]
                   for interval, coins in data.items()}
 
-        price_pct_chg = {f'pricesPctChg_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
-                                                              [d[['date', 'open']][d['date'] >= self.start_time].rename(
+        price_pct_chg = {f'pricesPctChg_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='outer'),
+                                                            [d[['date', 'open']][d['date'] >= self.start_time].rename(
                                                                   columns={'open': f'{coin}_open'})
-                                                                  for coin, d in coins.items()]).drop(columns=['date']).pct_change().values[1:]
+                                                                  for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill', axis=0).pct_change().values[1:].reshape(1, -1, len(coins))
                          for interval, coins in data.items()}
 
         volatility = {
-            f'volatility_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
+            f'volatility_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='outer'),
                                              [self._volatility(d)[d['date'] >= self.start_time].rename(
                                                  columns={'volatility': f'{coin}_volatility'})
-                                                 for coin, d in coins.items()]).drop(columns=['date']).values[1:]
+                                                 for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill', axis=0).values[1:].reshape(1, -1, len(coins))
             for interval, coins in data.items()}
 
         open_close = {
-            f'openclose_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
+            f'openclose_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='outer'),
                                              [self._openclose(d)[d['date'] >= self.start_time].rename(
                                                  columns={'openclose': f'{coin}_openclose'})
-                                                 for coin, d in coins.items()]).drop(columns=['date']).values[1:]
+                                                 for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill', axis=0).values[1:].reshape(1, -1, len(coins))
             for interval, coins in data.items()}
 
-        volumes = {f'volumes_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='inner'),
-                                                 [d[['date', 'volume']][d['date'] >= self.start_time].rename(
+        volumes = {f'volumes_{interval}': reduce(lambda left, right: pd.merge(left, right, on=['date'], how='outer'),
+                                                 [self._volume(d)[d['date'] >= self.start_time].rename(
                                                      columns={'volume': f'{coin}_volume'})
-                                                     for coin, d in coins.items()]).drop(columns=['date']).pct_change().values[1:]
+                                                     for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill', axis=0).values[1:].reshape(1, -1, len(coins))
                    for interval, coins in data.items()}
 
         return {'dates': dates, 'data': {**price_pct_chg, **open_close, **volatility, **volumes}, 'prices': {**prices}}
@@ -755,15 +749,21 @@ class TrainingEnvV2(Env):
         data_slice = self.data['prices'][f'prices_{self.min_interval}'][idx, :]
         return {coin: data_slice[i] for i, coin in enumerate(self.coins)}
 
-    def rand_date(self, start, end, n):
-        unit = 10 ** 9
-        start_u = start // unit
-        end_u = end // unit
-
-        res = np.datetime_as_string((unit * np.random.randint(start_u, end_u, n, dtype=np.int64)).view('M8[ns]'),
-                                    unit='D')[0]
-        res = datetime.datetime.fromisoformat(res)
-        return res
+    # def rand_date(self, start, end, n):
+    #     unit = 10 ** 9
+    #     start_u = start // unit
+    #     end_u = end // unit
+    #
+    #     res = np.datetime_as_string((unit * np.random.randint(start_u, end_u, n, dtype=np.int64)).view('M8[ns]'),
+    #                                 unit='D')[0]
+    #     res = pd.to_datetime(datetime.datetime.fromisoformat(res))
+    #     return res
+    def rand_date(self, start, end):
+        """Generate a random datetime between `start` and `end`"""
+        return (start + datetime.timedelta(
+            # Get a random amount of seconds between `start` and `end`
+            seconds=random.randint(0, int((end - start).total_seconds())),
+        )).replace(second=0, minute=0, hour=0)
 
     def softmax(self, arr):
         exp_arr = np.exp(arr)

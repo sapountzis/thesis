@@ -1,6 +1,6 @@
 from functools import partial
 import pandas as pd
-from pathlib import Path
+import os
 import warnings
 
 
@@ -28,8 +28,8 @@ def resample_candles(candles: pd.DataFrame, window, label="right", closed="right
     return candles
 
 
-def load_feather(path: Path, resample=None, index_col='date'):
-    df = pd.read_feather(str(path))
+def load_feather(path: str, resample=None, index_col='date'):
+    df = pd.read_feather(path)
     cols = df.columns.tolist()
     for c in ['open', 'high', 'low', 'close', index_col]:
         assert c in cols, f"{c} is missing from columns from {str(path)}. All cols in this df is {cols}"
@@ -37,31 +37,33 @@ def load_feather(path: Path, resample=None, index_col='date'):
         df.set_index(index_col, inplace=True)
     if resample:
         df = resample_candles(df, window=resample)
-    return path.stem.lower(), df
+    return path.lower(), df
 
 
-def load_feather_dir(path: Path, resample=None, pairs=None, index_col='date', n_workers=None):
-    path = Path(path).expanduser()
+def load_feather_dir(path: str, resample=None, pairs=None, index_col='date', n_workers=None):
+    # path = Path(path).expanduser()
     feather_dict = dict()
-    dirlist = list(path.iterdir())
-    flist = [f for f in dirlist if f.suffix == '.feather']
-    if len(flist) < len(dirlist):
-        ignored_files = set(dirlist) - set(flist)
-        ignored_files = [f.name for f in ignored_files]
-        print(f"Ignoring non-feather files: {','.join(ignored_files)}")
+    dirlist = os.listdir(path)
+    flist = [f.removesuffix('.feather') for f in dirlist if f.endswith('.feather')]
+
+    # if len(flist) < len(dirlist):
+    #     ignored_files = set(dirlist) - set(flist)
+    #     ignored_files = [f.name for f in ignored_files]
+    #     print(f"Ignoring non-feather files: {','.join(ignored_files)}")
     if pairs is not None:
         pairs = [p.lower() for p in pairs]
-        flist = filter(lambda f: f.stem.lower() in pairs, flist)
+        flist = filter(lambda f: f.lower() in pairs, flist)
     if not n_workers:
         for f in flist:
-            if f.suffix == '.feather':
-                feather_dict[f.stem.lower()] = load_feather(f, resample=resample, index_col=index_col)[1]
+            feather_dict[f.lower()] = load_feather(f'{path}/{f}.feather', resample=resample, index_col=index_col)[1]
     else:
+        flist = [f'{path}/{f}.feather' for f in flist]
         from multiprocessing import Pool
         p = Pool(n_workers)
         load_feather_par = partial(load_feather, resample=resample, index_col=index_col)
         for res in p.imap_unordered(load_feather_par, flist):
             feather_dict[res[0]] = res[1]
+
     for k in list(feather_dict.keys()):
         if (feather_dict[k].close == 0).any():
             warnings.warn(f"Found close price zero in candles of {k} pair. Deleting pair...")
@@ -69,10 +71,10 @@ def load_feather_dir(path: Path, resample=None, pairs=None, index_col='date', n_
     return feather_dict
 
 
-def load_train_df(path: Path, intervals=None, coins=None, fiat=None, index_col='date', end_date=None):
+def load_train_df(path: str, intervals=None, coins=None, fiat=None, index_col='date', start_date=None, end_date=None):
     pairs = [f'{c}{fiat}' for c in coins]
-    data = load_feather_dir(path, pairs=pairs, index_col=index_col, n_workers=4)
-    data = {k: data_split(v.reset_index(), start=None, end=end_date).set_index(index_col, inplace=False)
+    data = load_feather_dir(path, pairs=pairs, index_col=index_col, n_workers=None)
+    data = {k: data_split(v.reset_index(), start=start_date, end=end_date).set_index(index_col, inplace=False)
             for k, v in data.items()}
     interval_data = {interval: {k: resample_candles(v, interval).reset_index() for k, v in data.items()} for interval in intervals}
 

@@ -37,4 +37,8 @@ def make_config(config_path):
         torch.device(config['agent_kwargs']['device'])
         config['policy_kwargs']['features_extractor_class'] = features_extractor_class_map[config['policy_kwargs']['features_extractor_class']]
 
+    if config['policy_kwargs'].get('features_extractor_kwargs') is not None:
+        if config['policy_kwargs']['features_extractor_kwargs'].get('activation_fn') is not None:
+            config['policy_kwargs']['features_extractor_kwargs']['activation_fn'] = activation_f_map[config['policy_kwargs']['features_extractor_kwargs']['activation_fn']]
+
     return config
