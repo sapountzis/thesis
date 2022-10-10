@@ -181,7 +181,7 @@ class TradingEnv(Env):
 
     def get_prices(self):
         idx = self.date_idx[f'{self.min_interval}']['idx']
-        data_slice = self.data['prices'][idx, :]
+        data_slice = self.data['prices'][idx: idx+2, :]
         return {coin: data_slice[index] for index, coin in enumerate(self.coins)}
 
     def take_action(self, action):
@@ -197,17 +197,17 @@ class TradingEnv(Env):
 
             for coin, val in self.portfolio.items():
                 if coin != self.fiat:
-                    self.portfolio[self.fiat] += (1 - self.fee) * self.portfolio[coin] * prices[coin]
+                    self.portfolio[self.fiat] += (1 - self.fee) * self.portfolio[coin] * prices[coin][0]
                     self.portfolio[coin] = 0
 
             for coin, val in portfolio_alloc.items():
                 amount = (1 - self.fee) * self.portfolio[self.fiat] * val
-                self.portfolio[coin] = amount / prices[coin]
+                self.portfolio[coin] = amount / prices[coin][0]
                 self.portfolio[self.fiat] -= amount
 
-        portfolio_value = sum(self.portfolio[coin] * prices[coin] for coin in self.coins) + self.portfolio[self.fiat]
-        portfolio_change = (portfolio_value - self.portfolio_value) / self.portfolio_value
-        self.portfolio_value = portfolio_value
+        portfolio_value_next = sum(self.portfolio[coin] * prices[coin][1] for coin in self.coins) + self.portfolio[self.fiat]
+        portfolio_change = (portfolio_value_next - self.portfolio_value) / self.portfolio_value
+        self.portfolio_value = portfolio_value_next
 
         return portfolio_change
 
