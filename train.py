@@ -62,7 +62,7 @@ if __name__ == '__main__':
     # model = PPO('MultiInputPolicy', env, verbose=0, tensorboard_log=tensorboard_log)
     model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=0, device='cpu',
                          tensorboard_log=tensorboard_log,
-                         learning_rate=1e-5, batch_size=1024, n_steps=4096, clip_range=0.1,
+                         learning_rate=1e-4, batch_size=1024, n_steps=4096, clip_range=0.1,
                          policy_kwargs={'net_arch': [256, 256, 256]}, n_epochs=5)
     # agent = DRLAgent(env=lambda cfg: env, price_array=None, tech_array=None, turbulence_array=None)
 

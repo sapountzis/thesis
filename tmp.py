@@ -182,7 +182,7 @@ class TradingEnv(Env):
     def get_prices(self):
         idx = self.date_idx[f'{self.min_interval}']['idx']
         data_slice = self.data['prices'][idx: idx+2, :]
-        return {coin: data_slice[index] for index, coin in enumerate(self.coins)}
+        return {coin: data_slice[:, index] for index, coin in enumerate(self.coins)}
 
     def take_action(self, action):
         self.trade_threshold = action[-1]
