@@ -11,8 +11,6 @@ from tmp import TradingEnv
 
 if __name__ == '__main__':
 
-    episode_timesteps = 1024
-
     config = make_config('config.json')
 
     agent = config['agent']
@@ -23,10 +21,12 @@ if __name__ == '__main__':
     tensorboard_log = config['tensorboard_log']
     tb_log_name = f'{agent_id}'
 
+    episode_timesteps = config['env_kwargs']['episode_length']
+
     df = load_train_df(config['data_dir'], intervals=config['intervals'], coins=config['coins'],
                        fiat=config['fiat'], index_col='date', end_date=config['train_end'], start_date='2020-01-01')
 
-    btc_hold = df['1H']['btcusdt'].iloc[:episode_timesteps]['open']
+    btc_hold = df['15min']['btcusdt'].iloc[:episode_timesteps]['open']
     btc_hold = btc_hold.iloc[-1] / btc_hold.iloc[0]
     print(f'BTC hold return: {btc_hold}')
     # plt.show()
@@ -51,17 +51,19 @@ if __name__ == '__main__':
     #     net_arch=net_arch, activation_fn=activation_f
     # )
 
-    PPO_PARAMS = {
-        "n_steps": 512,
-        "ent_coef": 0.005,
-        "learning_rate": 0.0001,
-        "batch_size": 128,
-    }
+    # PPO_PARAMS = {
+    #     "n_steps": 512,
+    #     "ent_coef": 0.005,
+    #     "learning_rate": 0.0001,
+    #     "batch_size": 128,
+    # }
 
     curr_model_id = config['checkpoint_timesteps']
     # model = PPO('MultiInputPolicy', env, verbose=0, tensorboard_log=tensorboard_log)
-    model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=0, device='cpu', **PPO_PARAMS,
-                         tensorboard_log=tensorboard_log, policy_kwargs=dict(net_arch=[256, 256]))
+    model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=0, device='cpu',
+                         tensorboard_log=tensorboard_log,
+                         learning_rate=1e-5, batch_size=1024, n_steps=4096, clip_range=0.1,
+                         policy_kwargs={'net_arch': [256, 256, 256]}, n_epochs=5)
     # agent = DRLAgent(env=lambda cfg: env, price_array=None, tech_array=None, turbulence_array=None)
 
     # model_ppo = agent.get_model("ppo", model_kwargs=PPO_PARAMS)
