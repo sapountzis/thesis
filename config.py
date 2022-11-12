@@ -16,20 +16,6 @@ def make_config(config_path):
         config = json.load(configfile)
         print("Config parsed successfully")
 
-    agent = config['agent']
-    curr_time = int(time.time())
-    agent_id = f'{agent}-{curr_time}'
-    modelsdir = f'models/{agent_id}'
-    logdir = config['log_dir']
-    tensorboard_log = config['tensorboard_log']
-
-    os.makedirs(logdir, exist_ok=True)
-    os.makedirs(tensorboard_log, exist_ok=True)
-    os.makedirs(modelsdir, exist_ok=True)
-
-    with open(f'{logdir}/{agent_id}.config.json', 'w') as f:
-        json.dump(config, f)
-
     if config['policy_kwargs'].get('activation_fn') is not None:
         config['policy_kwargs']['activation_fn'] = activation_f_map[config['policy_kwargs']['activation_fn']]
 
@@ -42,3 +28,19 @@ def make_config(config_path):
             config['policy_kwargs']['features_extractor_kwargs']['activation_fn'] = activation_f_map[config['policy_kwargs']['features_extractor_kwargs']['activation_fn']]
 
     return config
+
+
+def make_dirs(config):
+    agent = config['agent']
+    curr_time = int(time.time())
+    agent_id = f'{agent}-{curr_time}'
+    config['agent_id'] = agent_id
+    modelsdir = f'models/{agent_id}'
+    logdir = config['log_dir']
+    tensorboard_log = config['tensorboard_log']
+    os.makedirs(logdir, exist_ok=True)
+    os.makedirs(tensorboard_log, exist_ok=True)
+    os.makedirs(modelsdir, exist_ok=True)
+
+    # with open(f'{logdir}/{agent_id}.config.json', 'w') as f:
+    #     json.dump(config, f)
