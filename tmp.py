@@ -15,10 +15,11 @@ import random
 
 
 class TradingEnv(Env):
-    def __init__(self, data, capital, ep_len, fee, env_id):
+    def __init__(self, data, capital, ep_len, fee, env_id, log_freq=128, log=True):
         super(TradingEnv, self).__init__()
         self.env_id = env_id
 
+        self.log_freq = log_freq
         self.ep_len = ep_len
         self.intervals = list(data.keys())
         self.interval2offset = {interval: to_offset(interval) for interval in self.intervals}
@@ -38,6 +39,7 @@ class TradingEnv(Env):
         self.curr_date = self.start_date
         self.date_idx = {interval: {'datetime': self.start_date, 'idx': 0} for interval in self.intervals}
 
+        self.log = log
         self.logs = {}
         self.capital = capital
         self.portfolio = {coin: 0 for coin in self.coins}
@@ -62,7 +64,7 @@ class TradingEnv(Env):
         self.done = False
 
         self.episode = -1
-        self.logs = {'episode_info': np.zeros((self.ep_len, 3)),
+        self.logs = {'episode_info': np.zeros((self.ep_len // log_freq, 3)),
                      'trades': np.zeros((self.ep_len, len(self.portfolio) + 2))}
 
     def reset(self):
@@ -81,7 +83,7 @@ class TradingEnv(Env):
         self.observation = {'portfolio_alloc': self.portfolio_alloc}
         self.produce_observation(self.curr_date)
 
-        self.logs = {'episode_info': np.zeros((self.ep_len, 3)),
+        self.logs = {'episode_info': np.zeros((self.ep_len // self.log_freq, 3)),
                      'trades': np.zeros((self.ep_len, len(self.portfolio) + 2))}
 
         return self.observation
@@ -89,7 +91,8 @@ class TradingEnv(Env):
     def step(self, action: np.ndarray):
         self.reward = self.take_action(action)
 
-        self.logger()
+        if self.log:
+            self.logger()
 
         self.curr_date += self.timestep
         self.produce_observation(self.curr_date)
@@ -212,7 +215,8 @@ class TradingEnv(Env):
         return portfolio_change
 
     def logger(self):
-        self.logs['episode_info'][self.steps] = [self.reward, self.portfolio_value, int(self.trade)]
+        if self.steps % self.log_freq == 0:
+            self.logs['episode_info'][self.steps // self.log_freq] = [self.reward, self.portfolio_value, int(self.trade)]
         if self.trade or self.steps == 0:
             idx = self.trades
             self.logs['trades'][idx, :] = [self.steps, self.portfolio_value, *list(self.portfolio_alloc)]

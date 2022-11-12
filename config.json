@@ -1,4 +1,5 @@
 {
+  "continue": true,
   "checkpoint_timesteps": 1000000,
   "total_timesteps": 100000000,
   "coins": ["BTC", "ETH", "ADA", "LTC", "VET", "XRP"],
@@ -32,8 +33,9 @@
     "reward_alpha": 0.001,
     "fixed_episode_length": true,
     "fixed_episode_length_coef": 2,
-    "episode_length": 4096
+    "episode_length": 16384
   },
+  "train_start": "1-1-2020",
   "train_end": "1-1-2021",
   "fiat": "usdt",
   "intervals": ["15min", "4H"],
