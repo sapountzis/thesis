@@ -1,14 +1,9 @@
 import os
-import time
-# import matplotlib as mpl
-# import matplotlib.pyplot as plt
-from stable_baselines3 import PPO
 from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.utils import get_schedule_fn, get_linear_fn, update_learning_rate
 
 from config import make_config, make_dirs
+from envs import TradingEnv
 from loading_utils import load_train_df
-from tmp import TradingEnv
 
 if __name__ == '__main__':
 
@@ -20,9 +15,9 @@ if __name__ == '__main__':
                        fiat=config['fiat'], index_col='date',
                        end_date=config['train_end'], start_date=config['train_start'])
 
-    btc_hold = df['15min']['btcusdt'].iloc[:episode_timesteps]['open']
-    btc_hold = btc_hold.iloc[-1] / btc_hold.iloc[0]
-    print(f'BTC hold return: {btc_hold}')
+    # btc_hold = df['15min']['btcusdt'].iloc[:episode_timesteps]['open']
+    # btc_hold = btc_hold.iloc[-1] / btc_hold.iloc[0]
+    # print(f'BTC hold return: {btc_hold}')
     # plt.show()
 
     learning_rate = 1e-4
@@ -44,7 +39,8 @@ if __name__ == '__main__':
         eps = os.listdir(f'model_logs/{prev_agent_id}')
         eps = sorted([int(ep.split('_')[1]) for ep in eps if ep.endswith('trades.csv')])
         ep_start = eps[-1] + 1
-        env = TradingEnv(df, capital=1000, ep_len=episode_timesteps, fee=0.00022, env_id=agent_id)
+        env = TradingEnv(df, capital=config['env_kwargs']['capital'], ep_len=config['env_kwargs']['episode_length'],
+                         fee=config['env_kwargs']['fee'], env_id=agent_id)
         env.episode = ep_start - 1
         model = RecurrentPPO.load(f'models/{prev_agent_id}/{curr_model_id}.zip', env=env)
     else:
@@ -53,12 +49,19 @@ if __name__ == '__main__':
         agent_id = config['agent_id']
         tensorboard_log = config['tensorboard_log']
         curr_model_id = config['checkpoint_timesteps']
-        env = TradingEnv(df, capital=1000, ep_len=episode_timesteps, fee=0.00022, env_id=agent_id)
+        env = TradingEnv(df, capital=config['env_kwargs']['capital'], ep_len=config['env_kwargs']['episode_length'],
+                         fee=config['env_kwargs']['fee'], env_id=agent_id)
         # model = PPO('MultiInputPolicy', env, verbose=0, tensorboard_log=tensorboard_log)
         model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=1, device='cpu',
                              tensorboard_log=tensorboard_log,
-                             learning_rate=learning_rate, batch_size=1024, n_steps=4096, clip_range=clip_range,
-                             policy_kwargs={'net_arch': [256, 256, 256]}, n_epochs=5)
+                             learning_rate=config['agent_kwargs']['learning_rate'],
+                             batch_size=config['agent_kwargs']['batch_size'],
+                             n_steps=config['agent_kwargs']['n_steps'],
+                             clip_range=config['agent_kwargs']['clip_range'],
+                             n_epochs=config['agent_kwargs']['n_epochs'],
+                             policy_kwargs={'net_arch': config['policy_kwargs']['net_arch'],
+                                            'n_lstm_layers': config['policy_kwargs']['n_lstm_layers'],
+                                            'lstm_hidden_size': config['policy_kwargs']['lstm_hidden_size']})
 
     tb_log_name = f'{agent_id}'
     modelsdir = f'models/{agent_id}'
