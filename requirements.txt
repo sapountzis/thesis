@@ -2,6 +2,7 @@ numpy
 pandas
 pyarrow
 matplotlib
+seaborn
 torch
 stable-baselines3
 sb3_contrib

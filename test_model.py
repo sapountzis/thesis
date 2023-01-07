@@ -13,7 +13,8 @@ def test_model(model, config):
     ep_len = config['env_kwargs']['episode_length']
 
     test_size = int(ep_len / 4)
-    pre_test_size = min(test_size, ep_len - 1)
+    # pre_test_size = min(test_size, ep_len - 1)
+    pre_test_size = 0
     total_size = test_size + pre_test_size
 
     step = config['intervals'][0]
