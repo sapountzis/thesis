@@ -50,18 +50,20 @@ if __name__ == '__main__':
         tensorboard_log = config['tensorboard_log']
         curr_model_id = config['checkpoint_timesteps']
         env = TradingEnv(df, capital=config['env_kwargs']['capital'], ep_len=config['env_kwargs']['episode_length'],
-                         fee=config['env_kwargs']['fee'], env_id=agent_id)
+                         fee=config['env_kwargs']['fee'], env_id=agent_id, log_freq=config['log_freq'])
         # model = PPO('MultiInputPolicy', env, verbose=0, tensorboard_log=tensorboard_log)
-        model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=1, device='cpu',
-                             tensorboard_log=tensorboard_log,
-                             learning_rate=config['agent_kwargs']['learning_rate'],
-                             batch_size=config['agent_kwargs']['batch_size'],
-                             n_steps=config['agent_kwargs']['n_steps'],
-                             clip_range=config['agent_kwargs']['clip_range'],
-                             n_epochs=config['agent_kwargs']['n_epochs'],
-                             policy_kwargs={'net_arch': config['policy_kwargs']['net_arch'],
-                                            'n_lstm_layers': config['policy_kwargs']['n_lstm_layers'],
-                                            'lstm_hidden_size': config['policy_kwargs']['lstm_hidden_size']})
+        model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=1, tensorboard_log=tensorboard_log,
+                             **config['agent_kwargs'], policy_kwargs=config['policy_kwargs'])
+        # model = RecurrentPPO('MultiInputLstmPolicy', env, verbose=1, device='cpu',
+        #                      tensorboard_log=tensorboard_log,
+        #                      learning_rate=config['agent_kwargs']['learning_rate'],
+        #                      batch_size=config['agent_kwargs']['batch_size'],
+        #                      n_steps=config['agent_kwargs']['n_steps'],
+        #                      clip_range=config['agent_kwargs']['clip_range'],
+        #                      n_epochs=config['agent_kwargs']['n_epochs'],
+        #                      policy_kwargs={'net_arch': config['policy_kwargs']['net_arch'],
+        #                                     'n_lstm_layers': config['policy_kwargs']['n_lstm_layers'],
+        #                                     'lstm_hidden_size': config['policy_kwargs']['lstm_hidden_size']})
 
     tb_log_name = f'{agent_id}'
     modelsdir = f'models/{agent_id}'

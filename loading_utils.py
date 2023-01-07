@@ -22,7 +22,7 @@ def resample_candles(candles: pd.DataFrame, window, label="right", closed="right
     aggregation_dict = {"open": "first", "high": "max", "low": "min", "close": "last"}
     if "volume" in candles.columns:
         aggregation_dict["volume"] = "sum"
-    candles = candles.resample(window, label=label, closed=closed).agg(aggregation_dict).dropna()
+    candles = candles.fillna(method='ffill').resample(window, label=label, closed=closed).agg(aggregation_dict).dropna()
     if dropna:
         return candles.dropna()
     return candles

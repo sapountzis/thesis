@@ -57,7 +57,7 @@ class TradingEnv(Env):
                                                               dtype=np.float64)})
         self.observation_space = Dict(self.observation_space)
 
-        self.action_space = Box(low=0, high=1, shape=(len(self.portfolio)+1,), dtype=np.float64)
+        self.action_space = Box(low=0, high=1, shape=(len(self.portfolio) + 1,), dtype=np.float64)
         self.reward = 0
         self.trades = 0
         self.done = False
@@ -67,8 +67,8 @@ class TradingEnv(Env):
                      'trades': np.zeros((self.ep_len, len(self.portfolio) + 2))}
 
     def reset(self):
-        self.date_idx = {interval: {'datetime': self.start_date, 'idx': 0} for interval in self.intervals}
-        self.curr_date = self.start_date
+        # self.date_idx = {interval: {'datetime': self.start_date, 'idx': 0} for interval in self.intervals}
+        # self.curr_date = self.start_date
         if self.train:
             self.random_curr_date()
         self.episode += 1
@@ -101,7 +101,7 @@ class TradingEnv(Env):
 
         if self.steps >= self.ep_len:
             os.makedirs(f'model_logs/{self.env_id}', exist_ok=True)
-            trades = pd.DataFrame(np.round(self.logs['trades'][:self.trades+1], 4),
+            trades = pd.DataFrame(np.round(self.logs['trades'][:self.trades + 1], 4),
                                   columns=['step', 'portfolio_value', *self.portfolio.keys()])
             trades.to_csv(f'model_logs/{self.env_id}/logs_{self.episode}_trades.csv', index=False)
             episode_info = pd.DataFrame(np.round(self.logs['episode_info'], 4),
@@ -133,23 +133,24 @@ class TradingEnv(Env):
 
         dates = {f'dates_{interval}': reduce(lambda a, b: pd.merge(a, b, on='date', how='outer'),
                                              [d['date']
-                                              for coin, d in coins.items()]).fillna(method='ffill').iloc[2:]
+                                              for coin, d in coins.items()]).iloc[2:]
                  for interval, coins in data.items()}
 
         prices = reduce(lambda a, b: pd.merge(a, b, on='date', how='outer'),
                         [d[['date', 'open']].rename(columns={'open': f'{coin}'})
-                         for coin, d in data[self.min_interval].items()]).drop(columns=['date']).fillna(method='ffill').values[2:]
+                         for coin, d in data[self.min_interval].items()]).drop(columns=['date']).values[2:]
 
         price_pct_chg = {f'price_pct_chg_{interval}': reduce(lambda a, b: pd.merge(a, b, on='date', how='outer'),
                                                              [d[['date', 'open']].rename(
-                                                                    columns={'open': f'open_{coin}'}
+                                                                 columns={'open': f'open_{coin}'}
                                                              )
-                                                             for coin, d in coins.items()]).drop(columns=['date']).pct_change().fillna(method='ffill').values[1:-1]
+                                                                 for coin, d in coins.items()]).drop(
+            columns=['date']).pct_change().values[1:-1]
                          for interval, coins in data.items()}
 
         volume = {f'volume_{interval}': reduce(lambda a, b: pd.merge(a, b, on='date', how='outer'),
                                                [d[['date', 'volume']].rename(columns={'volume': f'volume_{coin}'})
-                                                   for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill').pct_change().values[1:-1]
+                                                for coin, d in coins.items()]).drop(columns=['date']).pct_change().values[1:-1]
                   for interval, coins in data.items()}
 
         for i in self.intervals:
@@ -160,17 +161,22 @@ class TradingEnv(Env):
                                                        [d[['date', 'volatility']].rename(
                                                            columns={'volatility': f'volatility_{coin}'}
                                                        )
-                                                        for coin, d in coins.items()]).drop(columns=['date']).fillna(method='ffill').values[1:-1]
+                                                           for coin, d in coins.items()]).drop(columns=['date']).values[1:-1]
                       for interval, coins in data.items()}
 
         self.start_date = max([dates[f'dates_{interval}']['date'].min() for interval in self.intervals])
 
-        date_mask = {f'{interval}': dates[f'dates_{interval}']['date'] >= self.start_date for interval in self.intervals}
+        date_mask = {f'{interval}': dates[f'dates_{interval}']['date'] >= self.start_date for interval in
+                     self.intervals}
         prices = prices[date_mask[self.min_interval]]
-        price_pct_chg = {f'price_pct_chg_{interval}': price_pct_chg[f'price_pct_chg_{interval}'][date_mask[interval]] for interval in self.intervals}
-        volume = {f'volume_{interval}': volume[f'volume_{interval}'][date_mask[interval]] for interval in self.intervals}
-        volatility = {f'volatility_{interval}': volatility[f'volatility_{interval}'][date_mask[interval]] for interval in self.intervals}
-        dates = {f'dates_{interval}': dates[f'dates_{interval}'][date_mask[interval]].reset_index(drop=True) for interval in self.intervals}
+        price_pct_chg = {f'price_pct_chg_{interval}': price_pct_chg[f'price_pct_chg_{interval}'][date_mask[interval]]
+                         for interval in self.intervals}
+        volume = {f'volume_{interval}': volume[f'volume_{interval}'][date_mask[interval]] for interval in
+                  self.intervals}
+        volatility = {f'volatility_{interval}': volatility[f'volatility_{interval}'][date_mask[interval]] for interval
+                      in self.intervals}
+        dates = {f'dates_{interval}': dates[f'dates_{interval}'][date_mask[interval]].reset_index(drop=True) for
+                 interval in self.intervals}
 
         features = {f'features_{interval}': np.concatenate((price_pct_chg[f'price_pct_chg_{interval}'],
                                                             volume[f'volume_{interval}'],
@@ -183,14 +189,32 @@ class TradingEnv(Env):
 
         return {'dates': dates, 'prices': prices, 'features': features}
 
-    def get_prices(self):
+    def get_prices(self, n=2):
         idx = self.date_idx[f'{self.min_interval}']['idx']
-        data_slice = self.data['prices'][idx: idx+2, :]
+        max_idx = len(self.data['prices'])
+        data_slice = self.data['prices'][idx: min(max_idx, idx+n), :]
         return {coin: data_slice[:, index] for index, coin in enumerate(self.coins)}
+
+    def sharpe_ratio(self, prices):
+
+        returns = self.get_returns(prices)
+
+        return returns.mean() / returns.std()
+
+    def get_returns(self, prices):
+        if self.portfolio_alloc[:-1].sum() == 0:
+            return np.zeros((1,))
+
+        portfolio_values = np.array([prices[coin][1:] * self.portfolio_alloc[i] for i, coin in enumerate(prices)])
+
+        portfolio_returns = portfolio_values[:, 1:] / portfolio_values[:, :-1] - 1
+        portfolio_returns = portfolio_returns.sum(axis=0)
+
+        return portfolio_returns
 
     def take_action(self, action):
         self.trade_threshold = action[-1]
-        prices = self.get_prices()
+        prices = self.get_prices(n=4)
 
         self.trade = self.trade_threshold >= 0.5
         if self.trade:
@@ -209,15 +233,19 @@ class TradingEnv(Env):
                 self.portfolio[coin] = amount / prices[coin][0]
                 self.portfolio[self.fiat] -= amount
 
-        portfolio_value_next = sum(self.portfolio[coin] * prices[coin][1] for coin in self.coins) + self.portfolio[self.fiat]
-        portfolio_change = (portfolio_value_next - self.portfolio_value) / self.portfolio_value
+        portfolio_value_next = sum(self.portfolio[coin] * prices[coin][1:].mean() for coin in self.coins) + self.portfolio[self.fiat]
+        portfolio_pct_change = (portfolio_value_next - self.portfolio_value) / self.portfolio_value
         self.portfolio_value = portfolio_value_next
 
-        return portfolio_change
+        # reward = self.get_returns(prices).mean()
+        # print(portfolio_pct_change, reward)
+        reward = portfolio_pct_change
+        return reward
 
     def logger(self):
         if self.steps % self.log_freq == 0:
-            self.logs['episode_info'][self.steps // self.log_freq] = [self.reward, self.portfolio_value, int(self.trade)]
+            self.logs['episode_info'][self.steps // self.log_freq] = [self.reward, self.portfolio_value,
+                                                                      int(self.trade)]
         if self.trade or self.steps == 0:
             idx = self.trades
             self.logs['trades'][idx, :] = [self.steps, self.portfolio_value, *list(self.portfolio_alloc)]
@@ -228,8 +256,10 @@ class TradingEnv(Env):
 
     def random_curr_date(self):
         idx = np.random.randint(0, self.data['dates'][f'dates_{self.min_interval}'].shape[0] - 16 - self.ep_len)
-        date = self.data['dates'][f'dates_{self.min_interval}']['date'].iloc[idx]
+        self.set_curr_date(idx)
 
+    def set_curr_date(self, idx):
+        date = self.data['dates'][f'dates_{self.min_interval}']['date'].iloc[idx]
         for interval in self.intervals:
             interval_idx = np.argmax(self.data['dates'][f'dates_{interval}']['date'] > date) - 1
             interval_date = self.data['dates'][f'dates_{interval}']['date'].iloc[interval_idx]

@@ -1,49 +1,36 @@
 {
-  "continue": true,
+  "agent": "RecurrentPPO",
+  "continue": false,
   "checkpoint_timesteps": 1000000,
   "total_timesteps": 100000000,
-  "coins": ["BTC", "ETH", "ADA", "LTC", "VET", "XRP"],
-  "agent": "PPO",
+  "coins": ["BTC", "ETH", "ADA", "LTC", "VET", "XRP", "AVAX", "DOT", "SOL"],
   "policy_kwargs": {
-    "net_arch": [{"pi": [64, 64], "vf": [64, 64]}],
-    "activation_fn": "relu",
-    "features_extractor_class": "cnn",
-    "features_extractor_kwargs": {
-      "dense_layers": 4,
-      "dense_units": 128,
-      "activation_fn": "relu"
-    }
+    "net_arch": [{"pi": [512, 512], "vf": [512, 512]}],
+    "activation_fn": "tanh",
+    "n_lstm_layers": 1,
+    "lstm_hidden_size": 512
   },
   "agent_kwargs": {
-    "n_steps": 2048,
-    "ent_coef": 0.001,
+    "n_steps": 1024,
     "learning_rate": 0.0001,
-    "batch_size": 64,
+    "batch_size": 128,
     "device": "cpu"
   },
   "env_kwargs": {
     "fiat": "usdt",
-    "past_steps": 32,
-    "fee": 0.00075,
+    "fee": 0.00022,
     "capital": 1000,
-    "loss_tolerance": 0.2,
-    "loss_penalty_coef": 1,
-    "holding_penalty_coef": 0.1,
-    "holding_penalty_threshold": 0.8,
-    "reward_alpha": 0.001,
-    "fixed_episode_length": true,
-    "fixed_episode_length_coef": 2,
-    "episode_length": 16384
+    "episode_length": 128
   },
-  "train_start": "1-1-2020",
-  "train_end": "1-1-2021",
+  "train_start": "1-1-2021",
+  "train_end": "1-1-2022",
   "fiat": "usdt",
-  "intervals": ["15min", "4H"],
-  "data_dir": "data/OHLC_candles/Crypto/minute_binance",
+  "intervals": ["4H"],
+  "data_dir": "binance_data/all",
   "log_dir": "logs",
+  "log_freq": 8,
   "tensorboard_log": "tb_logs",
   "policy": "MultiInputPolicy",
   "tb_monitor": ["trade_rate", "holdings_pc", "trade_capital_change", "total_capital_change", "ath_ratio", "atl_ratio", "trade_threshold"],
   "monitor" : ["trade_rate", "total_capital_change", "ep_len_pc", "maximum_steps_reached"]
 }
-
