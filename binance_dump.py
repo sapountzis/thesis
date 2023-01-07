@@ -21,22 +21,10 @@ if __name__ == '__main__':
     #
     # data_dumper.delete_outdated_daily_results()
 
-    pairs = os.listdir("binance_data/spot/monthly/klines")
-    for pair in pairs:
-        files = os.listdir(f"binance_data/spot/monthly/klines/{pair}/15m")
-        columns = ["Open time", "Open", "High", "Low", "Close", "Volume", "Close time",
-                                   "Quote asset volume",  "Number of trades", "Taker buy base asset volume",
-                                   "Taker buy quote asset volume", "Ignore"]
-        df = pd.DataFrame(columns=columns)
-        for file in files:
-            tmp = pd.read_csv(f"binance_data/spot/monthly/klines/{pair}/15m/{file}", header=None, names=columns)
-            df = pd.concat([df, tmp], axis=0)
+    pairs = os.listdir("binance_data/all")
 
-        df['Open time'] = pd.to_datetime(df['Open time'], unit='ms')
-        df.rename(columns={"Open time": "date", "Open": "open", "High": "high", "Low": "low", "Close": "close",
-                           "Volume": "volume"}, inplace=True)
-        df = df[["date", "open", "high", "low", "close", "volume"]]
-        df.sort_values(by='date', inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        df.to_feather(f"binance_data/all/{pair}.feather")
-        df.to_csv(f"binance_data/all/{pair}.csv", index=False)
+    for pair in pairs:
+        if pair.endswith('.feather'):
+            df = pd.read_feather(f'binance_data/all/{pair}')
+            print(df.head())
+
