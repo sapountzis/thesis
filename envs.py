@@ -55,6 +55,7 @@ class TradingEnv(Env):
                                   for interval, d in self.data['features'].items()}
         self.observation_space.update({'portfolio_alloc': Box(low=0, high=1, shape=(len(self.coins) + 1,),
                                                               dtype=np.float64)})
+        self.observation_space.update({'reward': Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float64)})
         self.observation_space = Dict(self.observation_space)
 
         self.action_space = Box(low=0, high=1, shape=(len(self.portfolio) + 1,), dtype=np.float64)
@@ -64,7 +65,7 @@ class TradingEnv(Env):
 
         self.episode = -1
         self.logs = {'episode_info': np.zeros((self.ep_len // log_freq, 3)),
-                     'trades': np.zeros((self.ep_len, len(self.portfolio) + 2))}
+                     'trades': np.zeros((self.ep_len + 1, len(self.portfolio) + 2))}
 
     def reset(self):
         # self.date_idx = {interval: {'datetime': self.start_date, 'idx': 0} for interval in self.intervals}
@@ -81,11 +82,11 @@ class TradingEnv(Env):
         self.portfolio_alloc = np.array([0 for _ in self.coins] + [1])
         self.portfolio_value = self.capital
 
-        self.observation = {'portfolio_alloc': self.portfolio_alloc}
+        self.observation = {'portfolio_alloc': self.portfolio_alloc, 'reward': np.zeros((1,))}
         self.produce_observation(self.curr_date)
 
         self.logs = {'episode_info': np.zeros((self.ep_len // self.log_freq, 3)),
-                     'trades': np.zeros((self.ep_len, len(self.portfolio) + 2))}
+                     'trades': np.zeros((self.ep_len + 1, len(self.portfolio) + 2))}
 
         return self.observation
 
@@ -123,6 +124,8 @@ class TradingEnv(Env):
 
         if self.trade:
             self.observation['portfolio_alloc'] = self.portfolio_alloc
+
+        self.observation['reward'] = self.reward
 
     def preprocess_data(self, data):
         data = {interval: {coin: data[interval][coin].set_index('date', inplace=False) for coin in self.coins}
@@ -234,7 +237,7 @@ class TradingEnv(Env):
                 self.portfolio[self.fiat] -= amount
 
         portfolio_value_next = sum(self.portfolio[coin] * prices[coin][1:].mean() for coin in self.coins) + self.portfolio[self.fiat]
-        portfolio_pct_change = (portfolio_value_next - self.portfolio_value) / self.portfolio_value
+        portfolio_pct_change = (portfolio_value_next - self.portfolio_value) / self.capital
         self.portfolio_value = portfolio_value_next
 
         # reward = self.get_returns(prices).mean()

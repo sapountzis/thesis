@@ -1,30 +1,29 @@
 {
   "agent": "RecurrentPPO",
   "continue": false,
-  "checkpoint_timesteps": 1000000,
-  "total_timesteps": 100000000,
+  "checkpoint_timesteps": 100000,
+  "total_timesteps": 10000000,
   "coins": ["BTC", "ETH", "ADA", "LTC", "VET", "XRP", "AVAX", "DOT", "SOL"],
   "policy_kwargs": {
-    "net_arch": [512, 512, 512],
+    "net_arch": [512, 512, 512, 512],
     "activation_fn": "tanh",
-    "n_lstm_layers": 1,
+    "n_lstm_layers": 2,
     "lstm_hidden_size": 512
   },
   "agent_kwargs": {
-    "n_steps": 1024,
-    "learning_rate": 0.0001,
-    "batch_size": 128,
-    "n_epochs": 3,
+    "n_steps": 2048,
+    "learning_rate": 0.0003,
+    "batch_size": 512,
+    "n_epochs": 5,
     "clip_range": 0.1,
-    "target_kl": 0.01,
-    "use_sde": true,
+    "gamma": 0.9,
     "device": "cpu"
   },
   "env_kwargs": {
     "fiat": "usdt",
     "fee": 0.00022,
     "capital": 1000,
-    "episode_length": 128
+    "episode_length": 2048
   },
   "train_start": "1-1-2021",
   "train_end": "1-1-2022",
@@ -32,7 +31,7 @@
   "intervals": ["4H"],
   "data_dir": "binance_data/all",
   "log_dir": "logs",
-  "log_freq": 8,
+  "log_freq": 4,
   "tensorboard_log": "tb_logs",
   "policy": "MultiInputPolicy",
   "tb_monitor": ["trade_rate", "holdings_pc", "trade_capital_change", "total_capital_change", "ath_ratio", "atl_ratio", "trade_threshold"],
