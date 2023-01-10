@@ -270,3 +270,4 @@ class TradingEnv(Env):
             interval_date = self.data['dates'][f'dates_{interval}']['date'].iloc[interval_idx]
             self.date_idx.update({interval: {'datetime': interval_date, 'idx': interval_idx}})
         self.curr_date = date
+

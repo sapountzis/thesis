@@ -1,6 +1,6 @@
 import os
 from sb3_contrib import RecurrentPPO
-
+import json
 from config import make_config, make_dirs
 from envs import TradingEnv
 from loading_utils import load_train_df
@@ -67,6 +67,10 @@ if __name__ == '__main__':
 
     tb_log_name = f'{agent_id}'
     modelsdir = f'models/{agent_id}'
+
+    # dump config to json
+    with open(f'logs/{config["agent_id"]}.config.json', 'w') as f:
+        json.dump(config, f)
 
     n_loops = config['total_timesteps'] // config['checkpoint_timesteps']
     for ep in range(1, n_loops + 1):
