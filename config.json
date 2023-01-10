@@ -5,28 +5,28 @@
   "total_timesteps": 10000000,
   "coins": ["BTC", "ETH", "ADA", "LTC", "VET", "XRP", "AVAX", "DOT", "SOL"],
   "policy_kwargs": {
-    "net_arch": [512, 512, 512, 512],
-    "activation_fn": "tanh",
+    "net_arch": [64, 64, 64],
     "n_lstm_layers": 2,
-    "lstm_hidden_size": 512
+    "lstm_hidden_size": 64
   },
   "agent_kwargs": {
     "n_steps": 2048,
     "learning_rate": 0.0003,
     "batch_size": 512,
-    "n_epochs": 5,
+    "n_epochs": 7,
     "clip_range": 0.1,
-    "gamma": 0.9,
+    "target_kl": 0.01,
+    "ent_coef": 0.01,
     "device": "cpu"
   },
   "env_kwargs": {
     "fiat": "usdt",
     "fee": 0.00022,
     "capital": 1000,
-    "episode_length": 2048
+    "episode_length": 1024
   },
   "train_start": "1-1-2021",
-  "train_end": "1-1-2022",
+  "train_end": "1-8-2022",
   "fiat": "usdt",
   "intervals": ["4H"],
   "data_dir": "binance_data/all",

@@ -15,7 +15,7 @@ from envs import TradingEnv
 if __name__ == '__main__':
     model_logs = 'model_logs'
     # model = sorted(os.listdir(model_logs))[-1]
-    model_name = 'PPO-1669804536'
+    model_name = 'RecurrentPPO-1673182213'
 
     print(f'Loading model {model_name} logs')
 
@@ -30,7 +30,7 @@ if __name__ == '__main__':
                        fiat=config['fiat'], index_col='date',
                        end_date=config['train_end'], start_date=config['train_start'])
 
-    trades_chkpnt = 2807
+    trades_chkpnt = 200
 
     coin_data = {coin: data
                  for interval, coin in df.items() for coin, data in coin.items() if interval == step}
@@ -124,10 +124,10 @@ if __name__ == '__main__':
     # fig.show()
     # fig.savefig(f'visualizations/model_vs_hold.png')
 
-    model_chkpnt = 50000000
+    model_chkpnt = 200000
     model = RecurrentPPO.load(f'models/{model_name}/{model_chkpnt}')
 
-    n_samples = 1000
+    n_samples = 20
 
     control_performance = np.zeros((n_samples, episode_timesteps))
     agent_performance = np.zeros((n_samples, episode_timesteps))
@@ -137,7 +137,7 @@ if __name__ == '__main__':
 
     lstm_states = None
     env = TradingEnv(df, capital=1, ep_len=episode_timesteps, fee=0.00022,
-                     env_id=f'{model_name}-{model_chkpnt}', log=False, train=False)
+                     env_id=f'{model_name}-{model_chkpnt}', log=True, train=False)
 
     for i, start in enumerate(random_starts):
         print(f'Running {i + 1} / {len(random_starts)}')
@@ -160,6 +160,9 @@ if __name__ == '__main__':
 
         control_performance[i, :] = coin_data_mean.values
 
+    print(agent_performance)
+    print(control_performance)
+
     # percentage change
     control_return = (control_performance[:, :-1] - control_performance[:, 1:]) / control_performance[:, :-1]
     agent_return = (agent_performance[:, :-1] - agent_performance[:, 1:]) / agent_performance[:, :-1]
@@ -173,16 +176,22 @@ if __name__ == '__main__':
     std_agent_return = agent_return.std(axis=1)
 
     # sharpe ratio
-    sharpe_control = mean_control_return / std_control_return
-    sharpe_agent = mean_agent_return / std_agent_return
+    sharpe_control = mean_control_return / (std_control_return + 1e-8)
+    sharpe_agent = mean_agent_return / (std_agent_return + 1e-8)
 
     # sortino std
-    std_sortino_control_return = np.array([np.std(control_return[i, control_return[i, :] < 0]) for i in range(n_samples)])
-    std_sortino_agent_return = np.array([np.std(agent_return[i, agent_return[i, :] < 0]) for i in range(n_samples)])
+    try:
+        std_sortino_control_return = np.array([np.std(control_return[i, control_return[i, :] < 0]) for i in range(n_samples)])
+    except Exception:
+        std_sortino_control_return = np.zeros(n_samples)
+    try:
+        std_sortino_agent_return = np.array([np.std(agent_return[i, agent_return[i, :] < 0]) for i in range(n_samples)])
+    except Exception:
+        std_sortino_agent_return = np.zeros(n_samples)
 
     # sortino ratio
-    sortino_control = mean_control_return / std_sortino_control_return
-    sortino_agent = mean_agent_return / std_sortino_agent_return
+    sortino_control = mean_control_return / (std_sortino_control_return + 1e-8)
+    sortino_agent = mean_agent_return / (std_sortino_agent_return + 1e-8)
 
     # violinplot sharpe
     fig, ax = plt.subplots(figsize=(20, 20))
