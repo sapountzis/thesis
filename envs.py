@@ -50,7 +50,6 @@ class TradingEnv(Env):
         self.trade_threshold = 0
 
         self.observation = {'portfolio_alloc': self.portfolio_alloc}
-        self.produce_observation(self.curr_date)
         self.observation_space = {interval: Box(low=-np.inf, high=np.inf, shape=(d.shape[1],), dtype=np.float64)
                                   for interval, d in self.data['features'].items()}
         self.observation_space.update({'portfolio_alloc': Box(low=0, high=1, shape=(len(self.coins) + 1,),
@@ -62,6 +61,8 @@ class TradingEnv(Env):
         self.reward = 0
         self.trades = 0
         self.done = False
+
+        self.produce_observation(self.curr_date)
 
         self.episode = -1
         self.logs = {'episode_info': np.zeros((self.ep_len // log_freq, 3)),
@@ -101,13 +102,14 @@ class TradingEnv(Env):
         self.steps += 1
 
         if self.steps >= self.ep_len:
-            os.makedirs(f'model_logs/{self.env_id}', exist_ok=True)
-            trades = pd.DataFrame(np.round(self.logs['trades'][:self.trades + 1], 4),
-                                  columns=['step', 'portfolio_value', *self.portfolio.keys()])
-            trades.to_csv(f'model_logs/{self.env_id}/logs_{self.episode}_trades.csv', index=False)
-            episode_info = pd.DataFrame(np.round(self.logs['episode_info'], 4),
-                                        columns=['reward', 'portfolio_value', 'trade'])
-            episode_info.to_csv(f'model_logs/{self.env_id}/logs_{self.episode}_episode_info.csv', index=False)
+            if self.log:
+                os.makedirs(f'model_logs/{self.env_id}', exist_ok=True)
+                trades = pd.DataFrame(np.round(self.logs['trades'][:self.trades + 1], 4),
+                                      columns=['step', 'portfolio_value', *self.portfolio.keys()])
+                trades.to_csv(f'model_logs/{self.env_id}/logs_{self.episode}_trades.csv', index=False)
+                episode_info = pd.DataFrame(np.round(self.logs['episode_info'], 4),
+                                            columns=['reward', 'portfolio_value', 'trade'])
+                episode_info.to_csv(f'model_logs/{self.env_id}/logs_{self.episode}_episode_info.csv', index=False)
             self.done = True
 
         return self.observation, self.reward, self.done, {}
@@ -125,7 +127,7 @@ class TradingEnv(Env):
         if self.trade:
             self.observation['portfolio_alloc'] = self.portfolio_alloc
 
-        self.observation['reward'] = self.reward
+        self.observation['reward'] = np.array([self.reward], dtype=np.float64)
 
     def preprocess_data(self, data):
         data = {interval: {coin: data[interval][coin].set_index('date', inplace=False) for coin in self.coins}
