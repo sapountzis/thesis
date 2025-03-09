@@ -6,3 +6,5 @@ models/
 data_old/
 data_aligned/
 logs/
+.venv/
+.env
